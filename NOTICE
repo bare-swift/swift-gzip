@@ -1,0 +1,12 @@
+swift-gzip
+Copyright (c) 2026 The bare-swift Project Authors.
+
+This product is licensed under the Apache License, Version 2.0, with LLVM
+exceptions. See LICENSE for details.
+
+This is a native bare-swift package; it is not derived from any upstream
+Rust crate. Implements RFC 1952 (GZIP file format specification version
+4.3) directly, wrapping swift-deflate for the inner DEFLATE body and
+swift-crc for the CRC-32/ISO-HDLC trailer check.
+
+RFC 1952: https://www.rfc-editor.org/rfc/rfc1952.html
