@@ -1,34 +1,36 @@
 # ``Gzip``
 
-RFC 1952 gzip decoder — Sendable, Foundation-free; wraps swift-deflate.
+RFC 1952 gzip codec — decoder (v0.1+) and encoder (v0.2+). Sendable, Foundation-free.
 
 ## Overview
 
-`Gzip.decode(_:)` strips the RFC 1952 gzip header / trailer, calls
-`Deflate.inflate(_:)` on the body, and validates the trailer's CRC32 +
-ISIZE fields against the decompressed data.
+`Gzip` provides both halves of RFC 1952:
+
+- ``Gzip/decode(_:)`` — v0.1+. Parses the 10-byte header, skips optional fields (FEXTRA, FNAME, FCOMMENT, FHCRC), inflates the DEFLATE body via swift-deflate, validates the trailer's CRC32 and ISIZE. Multi-member streams (RFC 1952 § 2.2) decode to concatenated output.
+- ``Gzip/encode(_:level:filename:modificationTime:)`` — v0.2+. Emits a single gzip member: fixed header, optional null-terminated ASCII FNAME, DEFLATE body, CRC32 + ISIZE trailer.
 
 ```swift
 import Gzip
 import Bytes
 
-// .gz file contents (1F 8B 08 ... CRC32 ISIZE)
-let gzipped: Bytes = ...
-let plain = try Gzip.decode(gzipped)
+let encoded = Gzip.encode(payload, level: .default, filename: "data.txt")
+let back = try Gzip.decode(encoded)  // round-trip
 ```
 
-Optional gzip header fields (FEXTRA, FNAME, FCOMMENT, FHCRC) are
-skipped past on read. The 16-bit FHCRC is parsed but not validated in
-v0.1 — the outer CRC32 over uncompressed data is the load-bearing
-integrity check.
-
-Per [RFC-0012](https://github.com/bare-swift/bare-swift/blob/main/rfcs/0012-phase-7-anchor-http-body-codecs.md),
-**v0.1 ships single-member decoding only**. Multi-member streams
-(RFC 1952 § 2.2 — concatenated gzip members) and the encoder land in
-v0.2.
+Per [RFC-0014](https://github.com/bare-swift/bare-swift/blob/main/rfcs/0014-phase-9-anchor-compression-encoder-sweep.md), v0.2 commits to **correctness** — zopfli-style size tuning lands as v0.2.x patch releases.
 
 ## Topics
 
-### Essentials
+### Decode (v0.1+)
+
+- ``Gzip/decode(_:)``
+
+### Encode (v0.2+)
+
+- ``Gzip/encode(_:level:filename:modificationTime:)``
+- ``Gzip/Encoder``
+- ``Gzip/Encoder/Level``
+
+### Errors
 
 - ``GzipError``

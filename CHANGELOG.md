@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-11
+
+### Added
+- `Gzip.encode(_:level:filename:modificationTime:)` — RFC 1952 single-member gzip encoder. Wraps `Deflate.encode` (v0.2) with the 10-byte fixed header, optional null-terminated FNAME (ASCII only), and the 8-byte CRC32 + ISIZE trailer.
+- `Gzip.Encoder` value type — single-shot encoder (streaming ships in v0.3).
+- `Gzip.Encoder.Level` typealias for `Deflate.Encoder.Level` (`.none`/`.fast`/`.default`/`.best`).
+- 17 new tests across 4 suites covering API surface, internal round-trip via v0.1 decoder, FNAME handling (including non-ASCII drop + NUL drop), and header-field byte-level correctness (MTIME LE, OS, XFL hint, ISIZE LE).
+
+### Changed
+- swift-deflate dep bumped from 0.1.0 to 0.2.0 (additive — unlocks `Deflate.encode`).
+
+### Unchanged from v0.1
+- `Gzip.decode(_:)` — bit-for-bit unchanged.
+- `GzipError` cases — all nine v0.1 cases preserved.
+
+### Limitations (out of scope for v0.2)
+- Multi-member encoded streams (RFC 1952 § 2.2). v0.2 produces single-member output only.
+- FCOMMENT, FEXTRA, FHCRC fields. v0.2 emits only FNAME (when supplied + ASCII).
+- Non-ASCII filenames silently drop the FNAME slot rather than producing OS-specific encodings.
+- Streaming encoding. v0.2 takes a single full `Bytes` input.
+
 ## [0.1.0] - 2026-05-10
 
 ### Added

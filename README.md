@@ -1,6 +1,6 @@
 # swift-gzip
 
-RFC 1952 gzip decoder — Sendable, Foundation-free; wraps swift-deflate.
+RFC 1952 gzip codec — decoder (v0.1+) and encoder (v0.2+). Sendable, Foundation-free; wraps swift-deflate.
 
 Part of the [bare-swift](https://github.com/bare-swift) ecosystem.
 
@@ -20,6 +20,8 @@ Then depend on the `Gzip` product:
 
 ## Usage
 
+### Decode (v0.1+)
+
 ```swift
 import Gzip
 import Bytes
@@ -29,31 +31,51 @@ let gzipped: Bytes = ...
 let plain = try Gzip.decode(gzipped)
 ```
 
+### Encode (v0.2+)
+
+```swift
+import Gzip
+import Bytes
+
+let payload: Bytes = ...
+let gzipped = Gzip.encode(payload, level: .default, filename: "data.txt")
+// Round-trip property: Gzip.decode(gzipped) == payload
+```
+
+Levels pass straight through to swift-deflate:
+
+- `.none` — stored blocks; no compression.
+- `.fast` — fixed Huffman; lowest CPU.
+- `.default` — dynamic Huffman; balanced (recommended default).
+- `.best` — dynamic Huffman + lazy matching; smallest output.
+
 ## Scope
 
-`swift-gzip` v0.1 implements RFC 1952 single-member gzip decoding:
+`swift-gzip` v0.2 ships **both halves** of RFC 1952:
 
-- 10-byte fixed header (magic `1F 8B`, CM=8, FLG, MTIME, XFL, OS).
-- Optional fields skipped per FLG bits: FEXTRA, FNAME, FCOMMENT, FHCRC.
-- DEFLATE body decompressed via swift-deflate.
-- 8-byte trailer validated: CRC32 (computed via swift-crc CRC-32/ISO-HDLC) + ISIZE (size mod 2^32).
+- Decoder: header parse + DEFLATE body (via swift-deflate) + CRC32/ISIZE trailer validation. Multi-member streams (RFC 1952 § 2.2) are accepted on decode.
+- Encoder: 10-byte fixed header, optional null-terminated ASCII FNAME, DEFLATE body (via swift-deflate v0.2), CRC32 + ISIZE trailer. Single-member only on encode.
 
 Public API:
 
-- `Gzip.decode(_ bytes: Bytes) throws(GzipError) -> Bytes` — single-shot.
-- `GzipError` typed-throws enum (9 cases including `truncated`, `badMagic`, `unsupportedCompressionMethod`, `crc32Mismatch`, `isizeMismatch`, `malformedDeflate(DeflateError)` wrapping the inner error).
+- `Gzip.decode(_:) throws(GzipError) -> Bytes`
+- `Gzip.encode(_:level:filename:modificationTime:) -> Bytes`
+- `Gzip.Encoder` value type with `.encode(_:)` method.
+- `Gzip.Encoder.Level` (typealias for `Deflate.Encoder.Level`).
+- `GzipError` typed-throws enum (9 cases).
 
 ## Dependencies
 
-- `swift-deflate` 0.1.0 — the DEFLATE inflater.
+- `swift-deflate` 0.2.0 — DEFLATE codec (inflate + deflate).
 - `swift-bytes` 0.1.0 — input/output buffer.
 - `swift-crc` 0.1.0 — CRC-32/ISO-HDLC.
 
-## Out of scope for v0.1
+## Out of scope for v0.2
 
-- **Encoder.** Per RFC-0012's staging pattern (decompression first), the gzip encoder lands in v0.2 alongside swift-deflate's DEFLATE encoder.
-- **Multi-member streams** (RFC 1952 § 2.2). Concatenated gzip members are accepted by `gzip` and `gunzip` but rare in HTTP. v0.1 takes a single member; multi-member lands in v0.2 once swift-deflate exposes a consumed-byte count for stream framing.
-- **FHCRC (header CRC16) validation.** The 2-byte field is parsed and skipped past; the outer CRC32 over uncompressed data is the load-bearing integrity check.
+- **Multi-member encoded streams** (RFC 1952 § 2.2). v0.2 produces single-member output only.
+- **FCOMMENT, FEXTRA, FHCRC fields on encode.** v0.2 emits only FNAME (when supplied + ASCII).
+- **Non-ASCII filenames** — the FNAME field is restricted to ASCII per RFC 1952 § 2.3.1.4's note that the field is OS-specific.
+- **Streaming encoding.**
 - `Codable` bridging — same Foundation-free / non-Codable differentiator as the rest of the ecosystem.
 
 ## Documentation
