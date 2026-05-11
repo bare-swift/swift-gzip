@@ -267,3 +267,105 @@ struct GzipEncoderRoundTripTests {
         }
     }
 }
+
+@Suite("Gzip encoder FNAME handling")
+struct GzipEncoderFNAMETests {
+    @Test("FNAME embedded in header round-trips through v0.1 decoder")
+    func fnameRoundTrip() throws {
+        let input = Bytes([0x68, 0x69])
+        let encoded = Gzip.encode(input, filename: "test.txt")
+        #expect(encoded.storage[3] & 0x08 != 0)
+        let back = try Gzip.decode(encoded)
+        #expect(back.storage == input.storage)
+    }
+
+    @Test("non-ASCII filename silently drops the FNAME slot")
+    func nonAsciiFilenameDrops() throws {
+        let input = Bytes([0x41])
+        let encoded = Gzip.encode(input, filename: "résumé.txt")
+        #expect(encoded.storage[3] & 0x08 == 0)
+        let back = try Gzip.decode(encoded)
+        #expect(back.storage == input.storage)
+    }
+
+    @Test("filename containing NUL silently drops the FNAME slot")
+    func nulInFilenameDrops() throws {
+        let input = Bytes([0x41])
+        let encoded = Gzip.encode(input, filename: "ab\0cd.txt")
+        #expect(encoded.storage[3] & 0x08 == 0)
+        let back = try Gzip.decode(encoded)
+        #expect(back.storage == input.storage)
+    }
+
+    @Test("nil filename emits no FNAME slot")
+    func nilFilenameNoSlot() throws {
+        let input = Bytes([0x41])
+        let encoded = Gzip.encode(input, filename: nil)
+        #expect(encoded.storage[3] & 0x08 == 0)
+        let back = try Gzip.decode(encoded)
+        #expect(back.storage == input.storage)
+    }
+}
+
+@Suite("Gzip encoder header field correctness")
+struct GzipEncoderHeaderTests {
+    @Test("MTIME field is written little-endian and survives decode")
+    func mtimeLittleEndian() {
+        let input = Bytes([0x41])
+        let encoded = Gzip.encode(input, modificationTime: 0x12345678)
+        #expect(encoded.storage[4] == 0x78)
+        #expect(encoded.storage[5] == 0x56)
+        #expect(encoded.storage[6] == 0x34)
+        #expect(encoded.storage[7] == 0x12)
+    }
+
+    @Test("OS field is 0xFF (unknown)")
+    func osUnknown() {
+        let encoded = Gzip.encode(Bytes([0x41]))
+        #expect(encoded.storage[9] == 0xFF)
+    }
+
+    @Test("XFL hints level: .best → 2, .fast → 4, others → 0")
+    func xflHint() {
+        let input = Bytes([0x41])
+        #expect(Gzip.encode(input, level: .best).storage[8] == 2)
+        #expect(Gzip.encode(input, level: .fast).storage[8] == 4)
+        #expect(Gzip.encode(input, level: .default).storage[8] == 0)
+        #expect(Gzip.encode(input, level: .none).storage[8] == 0)
+    }
+
+    @Test("ISIZE is uncompressed length mod 2^32 (LE)")
+    func isizeLE() {
+        let input = Bytes(ContiguousArray(repeating: UInt8(0x42), count: 7))
+        let encoded = Gzip.encode(input, level: .none)
+        let n = encoded.storage.count
+        let i0 = UInt32(encoded.storage[n - 4])
+        let i1 = UInt32(encoded.storage[n - 3]) << 8
+        let i2 = UInt32(encoded.storage[n - 2]) << 16
+        let i3 = UInt32(encoded.storage[n - 1]) << 24
+        let isize = i0 | i1 | i2 | i3
+        #expect(isize == 7)
+    }
+}
+
+@Suite("v0.1 API stability — additive only")
+struct GzipV01StabilityTests {
+    @Test("Gzip.decode(_:) still round-trips with v0.2 encoder")
+    func decodeUnchanged() throws {
+        let input = Bytes([0x68, 0x65, 0x6C, 0x6C, 0x6F])
+        let encoded = Gzip.encode(input)
+        let back = try Gzip.decode(encoded)
+        #expect(back.storage == input.storage)
+    }
+
+    @Test("GzipError v0.1 cases still present")
+    func errorCasesPresent() {
+        let e: GzipError = .truncated
+        switch e {
+        case .truncated, .badMagic, .unsupportedCompressionMethod, .reservedFlagBitsSet,
+             .crc32Mismatch, .isizeMismatch, .unterminatedHeaderField, .headerCRCMismatch,
+             .malformedDeflate:
+            #expect(true)
+        }
+    }
+}
