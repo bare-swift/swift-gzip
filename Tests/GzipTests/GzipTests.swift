@@ -214,3 +214,56 @@ struct GzipEncoderAPITests {
         #expect(!fast.storage.isEmpty)
     }
 }
+
+@Suite("Gzip encoder round-trip via v0.1 decoder")
+struct GzipEncoderRoundTripTests {
+    @Test("empty input")
+    func empty() throws {
+        let input = Bytes()
+        let encoded = Gzip.encode(input)
+        let back = try Gzip.decode(encoded)
+        #expect(back.storage == input.storage)
+    }
+
+    @Test("ASCII 'hello'")
+    func helloAscii() throws {
+        let input = Bytes([0x68, 0x65, 0x6C, 0x6C, 0x6F])
+        let encoded = Gzip.encode(input)
+        let back = try Gzip.decode(encoded)
+        #expect(back.storage == input.storage)
+    }
+
+    @Test("100 bytes of 0x41 at .fast")
+    func runsFast() throws {
+        let input = Bytes(ContiguousArray(repeating: UInt8(0x41), count: 100))
+        let encoded = Gzip.encode(input, level: .fast)
+        let back = try Gzip.decode(encoded)
+        #expect(back.storage == input.storage)
+        #expect(encoded.storage.count < input.storage.count / 2,
+                "got \(encoded.storage.count) bytes")
+    }
+
+    @Test("64 KiB input round-trips at .default")
+    func largeDefault() throws {
+        var bytes = ContiguousArray<UInt8>()
+        bytes.reserveCapacity(65_536)
+        for i in 0..<65_536 {
+            bytes.append(UInt8(truncatingIfNeeded: i & 0x3F))
+        }
+        let input = Bytes(bytes)
+        let encoded = Gzip.encode(input, level: .default)
+        let back = try Gzip.decode(encoded)
+        #expect(back.storage == input.storage)
+    }
+
+    @Test("all four levels round-trip identical input")
+    func allLevels() throws {
+        let input = Bytes(ContiguousArray(repeating: UInt8(0x42), count: 50))
+        for level: Gzip.Encoder.Level in [.none, .fast, .default, .best] {
+            let encoded = Gzip.encode(input, level: level)
+            let back = try Gzip.decode(encoded)
+            #expect(back.storage == input.storage,
+                    "level \(level) failed round-trip")
+        }
+    }
+}
