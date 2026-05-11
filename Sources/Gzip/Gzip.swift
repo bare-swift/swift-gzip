@@ -33,3 +33,54 @@ public enum Gzip: Sendable {
         try Decoder.decode(bytes)
     }
 }
+
+extension Gzip {
+    /// RFC 1952 gzip compression entry point. Produces a single gzip
+    /// member with the supplied (optional) filename and modification time.
+    ///
+    /// Per [RFC-0014](https://github.com/bare-swift/bare-swift/blob/main/rfcs/0014-phase-9-anchor-compression-encoder-sweep.md),
+    /// v0.2 commits to *correctness* — zopfli-style size tuning is out of
+    /// scope and will land as v0.2.x patch releases.
+    public static func encode(
+        _ input: Bytes,
+        level: Encoder.Level = .default,
+        filename: String? = nil,
+        modificationTime: UInt32 = 0
+    ) -> Bytes {
+        Encoder(level: level, filename: filename, modificationTime: modificationTime)
+            .encode(input)
+    }
+
+    /// RFC 1952 gzip encoder. Single-shot in v0.2; streaming ships in v0.3.
+    public struct Encoder: Sendable {
+        /// Compression level — passed straight through to swift-deflate.
+        public typealias Level = Deflate.Encoder.Level
+
+        public let level: Level
+        /// Optional original filename embedded in the gzip header (FNAME).
+        /// Restricted to ASCII per RFC 1952 § 2.3.1.4 (the field is
+        /// OS-specific — we don't try to be clever about other encodings).
+        public let filename: String?
+        /// MTIME field. 0 means "no time stamp available" per spec.
+        public let modificationTime: UInt32
+
+        public init(
+            level: Level = .default,
+            filename: String? = nil,
+            modificationTime: UInt32 = 0
+        ) {
+            self.level = level
+            self.filename = filename
+            self.modificationTime = modificationTime
+        }
+
+        public func encode(_ input: Bytes) -> Bytes {
+            GzipEncoder.encode(
+                input,
+                level: level,
+                filename: filename,
+                modificationTime: modificationTime
+            )
+        }
+    }
+}

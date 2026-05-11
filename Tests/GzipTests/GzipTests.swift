@@ -193,3 +193,24 @@ struct EndToEndTests {
         _ = raw
     }
 }
+
+@Suite("Gzip.Encoder API surface")
+struct GzipEncoderAPITests {
+    @Test("Gzip.encode produces a stream that starts with 0x1F 0x8B 0x08")
+    func magicAndCM() {
+        let out = Gzip.encode(Bytes([0x41]))
+        #expect(out.storage.count >= 3)
+        #expect(out.storage[0] == 0x1F)
+        #expect(out.storage[1] == 0x8B)
+        #expect(out.storage[2] == 0x08)
+    }
+
+    @Test("Gzip.Encoder.Level forwards to Deflate.Encoder.Level")
+    func levelsForwarded() {
+        let input = Bytes([0x41, 0x42, 0x43])
+        let none = Gzip.encode(input, level: .none)
+        let fast = Gzip.encode(input, level: .fast)
+        #expect(!none.storage.isEmpty)
+        #expect(!fast.storage.isEmpty)
+    }
+}
