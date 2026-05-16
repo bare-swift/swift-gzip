@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-17
+
+### Added
+- **`Gzip.Streaming.Encoder.drain() -> Bytes`** — returns the byte-aligned portion of the accumulated stream so far, resetting the internal byte buffer. The encoder remains in the open state; subsequent `update(_:)` and `finish()` calls produce the remainder (including the CRC32 + ISIZE trailer at finish). The **first** `drain()` call emits the gzip header (10-byte fixed header + optional FNAME) followed by the drained DEFLATE bytes; subsequent drains return only DEFLATE bytes. CRC32 + ISIZE state accumulates across drains (drain does NOT touch the checksum; trailer is emitted only at `finish()`).
+- 6 new tests covering drain semantics (header-emitted-on-first-drain, subsequent-drain-empty), drain+finish round-trip, multiple-drain round-trip, drain-after-finish no-op, byte-equality with non-draining stream.
+
+### Dependencies
+- swift-deflate dep bumped 0.3.0 → 0.4.0 (for `Deflate.Streaming.Encoder.drain()`).
+
+### Use case
+Multi-coding HTTP `Content-Encoding` streaming via swift-content-encoding v0.6 (Phase 28+).
+
+### Migration (v0.3 → v0.4)
+- **Additive only — non-breaking.** All v0.3 APIs unchanged.
+- Existing v0.3 streams (no `drain()` calls) produce byte-identical output to v0.3.
+- `GzipError` cases unchanged.
+
+### Phase 27
+- Tranche 27C of [RFC-0032](https://github.com/bare-swift/bare-swift/blob/main/rfcs/0032-phase-27-anchor-codec-tier-v0.4-drain-sweep.md). Codec-tier v0.4 drain() API sweep.
+
 ## [0.3.0] — 2026-05-16
 
 ### Added

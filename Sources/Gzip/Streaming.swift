@@ -44,6 +44,7 @@ extension Gzip.Streaming {
         public let modificationTime: UInt32
 
         private var headerBytes: ContiguousArray<UInt8>
+        private var headerEmitted: Bool  // v0.4: track whether drain() has emitted the header
         private var deflateEncoder: Deflate.Streaming.Encoder
         private var crc: CRC.Digest<UInt32>
         private var isize: UInt64
@@ -62,6 +63,7 @@ extension Gzip.Streaming {
                 filename: filename,
                 modificationTime: modificationTime
             )
+            self.headerEmitted = false
             self.deflateEncoder = Deflate.Streaming.Encoder(level: level)
             self.crc = CRC.Digest(algorithm: .iso_hdlc)
             self.isize = 0
@@ -79,9 +81,42 @@ extension Gzip.Streaming {
             isize &+= UInt64(chunk.storage.count)
         }
 
-        /// Finalize the gzip stream: emit header + DEFLATE body + CRC32 +
-        /// ISIZE trailer. Throws ``GzipError/encoderFinished`` on
-        /// double-call.
+        /// Return the byte-aligned portion of the accumulated stream so far,
+        /// resetting the internal byte buffer. The encoder remains in the
+        /// open state — subsequent ``update(_:)`` and ``finish()`` calls
+        /// produce the remainder of the stream (including the CRC32 +
+        /// ISIZE trailer at finish).
+        ///
+        /// The first `drain()` call emits the gzip header (10-byte fixed
+        /// header + optional FNAME) followed by the drained DEFLATE bytes.
+        /// Subsequent drains return only DEFLATE bytes (header already
+        /// emitted).
+        ///
+        /// CRC32 + ISIZE state accumulates across drain calls — drain does
+        /// NOT touch the checksum. The trailer is emitted only at `finish()`.
+        ///
+        /// Concatenating all `drain()` returns with the final `finish()`
+        /// return produces the **same bytes** as a single `finish()` call
+        /// would have produced (byte-for-byte equality).
+        ///
+        /// Silent no-op (returns empty `Bytes`) when called after `finish()`.
+        ///
+        /// Added in v0.4 for multi-coding HTTP streaming composition.
+        public mutating func drain() -> Bytes {
+            guard case .open = state else { return Bytes() }
+            var out = ContiguousArray<UInt8>()
+            if !headerEmitted {
+                out.append(contentsOf: headerBytes)
+                headerEmitted = true
+            }
+            let deflateBytes = deflateEncoder.drain()
+            out.append(contentsOf: deflateBytes.storage)
+            return Bytes(out)
+        }
+
+        /// Finalize the gzip stream: emit header (if not already emitted via
+        /// drain) + remaining DEFLATE body + CRC32 + ISIZE trailer. Throws
+        /// ``GzipError/encoderFinished`` on double-call.
         public mutating func finish() throws(GzipError) -> Bytes {
             guard case .open = state else { throw .encoderFinished }
             state = .finished
@@ -95,7 +130,10 @@ extension Gzip.Streaming {
 
             var out = ContiguousArray<UInt8>()
             out.reserveCapacity(headerBytes.count + deflateBytes.storage.count + 8)
-            out.append(contentsOf: headerBytes)
+            if !headerEmitted {
+                out.append(contentsOf: headerBytes)
+                headerEmitted = true
+            }
             out.append(contentsOf: deflateBytes.storage)
 
             // CRC32 LE.

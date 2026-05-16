@@ -191,6 +191,108 @@ struct StreamingTests {
         }
     }
 
+    // MARK: - Drain (v0.4)
+
+    @Test("drain() on fresh encoder emits gzip header (10 bytes minimum)")
+    func drainFreshEmitsHeader() throws {
+        var encoder = Gzip.Streaming.Encoder()
+        let drained = encoder.drain()
+        // First drain emits the 10-byte gzip header even with no body yet.
+        #expect(drained.storage.count >= 10)
+        #expect(drained.storage[0] == 0x1F)
+        #expect(drained.storage[1] == 0x8B)
+    }
+
+    @Test("second drain() with no update between is empty (header already emitted)")
+    func secondDrainEmpty() throws {
+        var encoder = Gzip.Streaming.Encoder()
+        _ = encoder.drain()  // emits header
+        let second = encoder.drain()
+        #expect(second.storage.count == 0)
+    }
+
+    @Test("drain() after update emits header + deflate bytes; finish completes trailer")
+    func drainConcatRoundTrip() throws {
+        let payload = Self.bytesFromString("hello world hello world")
+        var encoder = Gzip.Streaming.Encoder()
+        encoder.update(payload)
+        let drained = encoder.drain()
+        let final = try encoder.finish()
+
+        // Drain should have emitted the gzip header (10 bytes).
+        #expect(drained.storage.count >= 10)
+        #expect(drained.storage[0] == 0x1F)
+        #expect(drained.storage[1] == 0x8B)
+
+        var combined = Bytes()
+        combined.append(contentsOf: drained.storage)
+        combined.append(contentsOf: final.storage)
+        let plain = try Gzip.decode(combined)
+        #expect(Array(plain.storage) == Array(payload.storage))
+    }
+
+    @Test("multiple drains: only first emits header; trailer emitted at finish")
+    func multipleDrains() throws {
+        var encoder = Gzip.Streaming.Encoder()
+        encoder.update(Self.bytesFromString("first"))
+        var collected = Bytes()
+        let d1 = encoder.drain()
+        collected.append(contentsOf: d1.storage)
+        // First drain emits header.
+        #expect(d1.storage.count >= 10)
+        #expect(d1.storage[0] == 0x1F)
+
+        encoder.update(Self.bytesFromString("second"))
+        let d2 = encoder.drain()
+        collected.append(contentsOf: d2.storage)
+        // Second drain does NOT re-emit header — these bytes are not the gzip magic prefix.
+        // (We can't check d2[0] for "not 0x1F" because deflate output can incidentally start
+        // with 0x1F. Instead, check overall round-trip succeeds.)
+
+        encoder.update(Self.bytesFromString("third"))
+        collected.append(contentsOf: encoder.drain().storage)
+        collected.append(contentsOf: (try encoder.finish()).storage)
+
+        let plain = try Gzip.decode(collected)
+        #expect(Array(plain.storage) == Array("firstsecondthird".utf8))
+    }
+
+    @Test("drain after finish is silent no-op")
+    func drainAfterFinish() throws {
+        var encoder = Gzip.Streaming.Encoder()
+        encoder.update(Self.bytesFromString("data"))
+        _ = try encoder.finish()
+        let drained = encoder.drain()
+        #expect(drained.storage.count == 0)
+    }
+
+    @Test("non-draining stream byte-equals concatenated-drains stream")
+    func drainConcatByteEquality() throws {
+        let chunk1 = Self.bytesFromString("aaaaaaaaaa")
+        let chunk2 = Self.bytesFromString("bbbbbbbbbb")
+
+        var reference = Gzip.Streaming.Encoder()
+        reference.update(chunk1)
+        reference.update(chunk2)
+        let referenceOutput = try reference.finish()
+
+        var draining = Gzip.Streaming.Encoder()
+        draining.update(chunk1)
+        let d1 = draining.drain()
+        draining.update(chunk2)
+        let d2 = draining.drain()
+        let d3 = try draining.finish()
+
+        var combined = Bytes()
+        combined.append(contentsOf: d1.storage)
+        combined.append(contentsOf: d2.storage)
+        combined.append(contentsOf: d3.storage)
+
+        #expect(Array(combined.storage) == Array(referenceOutput.storage))
+    }
+
+    // MARK: - v0.3 edge cases
+
     @Test("update after finish is silent no-op (then double-finish throws)")
     func updateAfterFinishNoOp() throws {
         var encoder = Gzip.Streaming.Encoder()
