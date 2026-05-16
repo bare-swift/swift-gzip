@@ -32,4 +32,8 @@ public enum GzipError: Error, Equatable, Sendable {
 
     /// Wrapped DEFLATE-level error from swift-deflate.
     case malformedDeflate(DeflateError)
+
+    /// Encoder: ``Gzip/Streaming/Encoder/finish()`` was called twice on
+    /// the same encoder.
+    case encoderFinished
 }

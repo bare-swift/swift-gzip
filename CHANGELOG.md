@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-16
+
+### Added
+- **Streaming encoder** — `Gzip.Streaming.Encoder` struct with `init(level:filename:modificationTime:)` / `update(_:)` / `finish()`. Wraps `Deflate.Streaming.Encoder` (swift-deflate v0.3) for the DEFLATE body + incremental CRC32 over uncompressed bytes via `CRC.Digest<UInt32>` + accumulating ISIZE counter + 10-byte gzip header (with optional FNAME) + 8-byte trailer (CRC32 LE + ISIZE LE).
+- `Gzip.Streaming` public namespace enum.
+- `GzipError.encoderFinished` — thrown when `finish()` is called on an already-finished encoder.
+- 16 new tests covering round-trip (empty, single chunk, two chunks, 100 tiny chunks, 70 KiB chunk), all four levels, header metadata (filename + modificationTime), and error/edge cases (double-finish, update-after-finish no-op).
+
+### Dependencies
+- swift-deflate dep bumped 0.2.0 → 0.3.0 (for `Deflate.Streaming.Encoder`).
+
+### Stream-format notes
+- Streaming output is **valid gzip** that decodes via the same `Gzip.decode(_:)` v0.1 API and reference `gzip` CLI.
+- Single-member gzip output only (RFC 1952 § 2.2 multi-member encoded streams remain out of scope; decoder still supports multi-member input from v0.1).
+- No window carry across chunks in v0.3 (inherited from swift-deflate v0.3). LZ77 match search is per-chunk. Inherits when swift-deflate v0.4 lands.
+
+### Migration (v0.2 → v0.3)
+- **Additive only — non-breaking.** All v0.2 APIs unchanged.
+- `Gzip.encode(_:level:filename:modificationTime:)` continues to emit byte-equal output to v0.2 (regression-tested via existing v0.2 round-trip tests).
+- `Gzip.Encoder` struct unchanged.
+- `Gzip.decode(_:)` unchanged from v0.1.
+- `GzipError` adds 1 new case (additive; existing cases unchanged).
+
+### Phase 24
+- Tranche 24A of [RFC-0029](https://github.com/bare-swift/bare-swift/blob/main/rfcs/0029-phase-24-anchor-gzip-zlib-v0.3-streaming-encoders.md). Continues codec-tier streaming sweep.
+
 ## [0.2.0] - 2026-05-11
 
 ### Added

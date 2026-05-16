@@ -84,3 +84,9 @@ extension Gzip {
         }
     }
 }
+
+extension Gzip {
+    /// Streaming encoder namespace (v0.3+). For one-shot compression of
+    /// bounded inputs, use ``Gzip/encode(_:level:filename:modificationTime:)``.
+    public enum Streaming: Sendable {}
+}

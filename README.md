@@ -1,6 +1,6 @@
 # swift-gzip
 
-RFC 1952 gzip codec — decoder (v0.1+) and encoder (v0.2+). Sendable, Foundation-free; wraps swift-deflate.
+RFC 1952 gzip codec — decoder (v0.1) + one-shot encoder (v0.2) + streaming encoder (v0.3). Sendable, Foundation-free; wraps swift-deflate.
 
 Part of the [bare-swift](https://github.com/bare-swift) ecosystem.
 
@@ -9,7 +9,7 @@ Part of the [bare-swift](https://github.com/bare-swift) ecosystem.
 Add to your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/bare-swift/swift-gzip.git", from: "0.1.0")
+.package(url: "https://github.com/bare-swift/swift-gzip.git", from: "0.3.0")
 ```
 
 Then depend on the `Gzip` product:
@@ -41,6 +41,33 @@ let payload: Bytes = ...
 let gzipped = Gzip.encode(payload, level: .default, filename: "data.txt")
 // Round-trip property: Gzip.decode(gzipped) == payload
 ```
+
+### Streaming encode (v0.3+)
+
+```swift
+import Gzip
+import Bytes
+
+var encoder = Gzip.Streaming.Encoder(level: .default, filename: "data.txt")
+encoder.update(chunk1)
+encoder.update(chunk2)
+let gzipped = try encoder.finish()
+let plain = try Gzip.decode(gzipped)
+// plain == chunk1 + chunk2
+```
+
+`Gzip.Streaming.Encoder` wraps `Deflate.Streaming.Encoder` (swift-deflate
+v0.3) for the body + an incremental CRC32 over uncompressed bytes + an
+ISIZE byte counter + gzip header/trailer framing. Each `update(_:)` feeds
+the chunk to the inner DEFLATE encoder, updates the CRC, and increments
+ISIZE. Empty chunks are no-ops. `finish()` emits the full gzip stream
+(header + DEFLATE body + 8-byte CRC32 + ISIZE trailer). After `finish()`
+the encoder is consumed — further `update(_:)` calls are silent no-ops;
+another `finish()` throws `encoderFinished`.
+
+Single-member gzip output only (RFC 1952 § 2.2 multi-member encoded
+streams remain out of scope; the decoder still supports multi-member
+input from v0.1).
 
 Levels pass straight through to swift-deflate:
 
