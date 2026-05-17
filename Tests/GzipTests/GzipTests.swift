@@ -364,7 +364,7 @@ struct GzipV01StabilityTests {
         switch e {
         case .truncated, .badMagic, .unsupportedCompressionMethod, .reservedFlagBitsSet,
              .crc32Mismatch, .isizeMismatch, .unterminatedHeaderField, .headerCRCMismatch,
-             .malformedDeflate, .encoderFinished:
+             .malformedDeflate, .encoderFinished, .decoderFinished:
             #expect(true)
         }
     }

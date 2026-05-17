@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-05-17
+
+### Added
+- **`Gzip.Streaming.Decoder`** — streaming-decode counterpart to v0.3's `Streaming.Encoder`. Mirrors the canonical streaming shape: `init() / update(_:) / finish() throws -> Bytes`. Wraps `Deflate.Streaming.Decoder` (swift-deflate v0.5). Buffers compressed input internally; at `finish()`, calls `Gzip.decode(_:)` one-shot which parses the gzip header, decompresses the DEFLATE body, verifies the CRC32 + ISIZE trailer, and returns the decompressed output.
+- `GzipError.decoderFinished` — thrown when `finish()` is called on an already-finished decoder.
+- 11 new tests covering round-trip via v0.2 one-shot encoder (single chunk, multi-chunk, tiny chunks, FNAME flag, 70 KiB payload, single-byte payload), truncated-input error, bad-magic error, double-finish error, update-after-finish no-op, empty-update no-op.
+
+### v0.5 implementation note (honest scope under limitation)
+- The decoder buffers all compressed input internally; decoded output is **not yielded incrementally** during `update(_:)`. Ships the streaming-symmetric API surface; true memory-streaming gzip decode is a v0.6+ candidate (inherits when swift-deflate v0.6 ships the state-machine-refactored streaming inflate).
+- Multi-member gzip streams (RFC 1952 § 2.2) decode to concatenated output (inherited from `Gzip.decode(_:)`).
+- Honest-scope-under-limitation pattern (Phase 25 → 28 → 30 → 31 instance).
+
+### Dependencies
+- swift-deflate dep bumped 0.4.0 → 0.5.0 (for `Deflate.Streaming.Decoder`).
+
+### Migration (v0.4 → v0.5)
+- **Additive only — non-breaking.** All v0.1-v0.4 APIs unchanged.
+- `GzipError` adds 1 new case (additive).
+
+### Phase 31
+- Tranche 31A of [RFC-0036](https://github.com/bare-swift/bare-swift/blob/main/rfcs/0036-phase-31-anchor-gzip-zlib-v0.5-streaming-inflate.md). Coordinated 2-tranche sweep adding `Streaming.Decoder` to swift-gzip + swift-zlib. Completes the deflate-family streaming-decode story.
+
 ## [0.4.0] — 2026-05-17
 
 ### Added

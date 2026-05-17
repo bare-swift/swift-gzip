@@ -36,4 +36,8 @@ public enum GzipError: Error, Equatable, Sendable {
     /// Encoder: ``Gzip/Streaming/Encoder/finish()`` was called twice on
     /// the same encoder.
     case encoderFinished
+
+    /// Decoder: ``Gzip/Streaming/Decoder/finish()`` was called twice on
+    /// the same decoder. Added in v0.5.
+    case decoderFinished
 }

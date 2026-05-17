@@ -293,6 +293,160 @@ struct StreamingTests {
 
     // MARK: - v0.3 edge cases
 
+    // MARK: - Streaming Decoder (v0.5)
+
+    @Test("Decoder: single chunk round-trip via v0.2 encoder")
+    func decoderSingleChunkRoundTrip() throws(GzipError) {
+        let payload = Self.bytesFromString("hello world hello world")
+        let gzipped = Gzip.encode(payload)
+        var decoder = Gzip.Streaming.Decoder()
+        decoder.update(gzipped)
+        let plain = try decoder.finish()
+        #expect(Array(plain.storage) == Array(payload.storage))
+    }
+
+    @Test("Decoder: multi-chunk input round-trip")
+    func decoderMultiChunkRoundTrip() throws(GzipError) {
+        let payload = Self.bytesFromString("The quick brown fox jumps over the lazy dog.")
+        let gzipped = Gzip.encode(payload)
+        let third = gzipped.storage.count / 3
+        let c1 = ContiguousArray(gzipped.storage[0..<third])
+        let c2 = ContiguousArray(gzipped.storage[third..<(2 * third)])
+        let c3 = ContiguousArray(gzipped.storage[(2 * third)..<gzipped.storage.count])
+        var decoder = Gzip.Streaming.Decoder()
+        decoder.update(Bytes(Array(c1)))
+        decoder.update(Bytes(Array(c2)))
+        decoder.update(Bytes(Array(c3)))
+        let plain = try decoder.finish()
+        #expect(Array(plain.storage) == Array(payload.storage))
+    }
+
+    @Test("Decoder: tiny 1-byte chunks round-trip")
+    func decoderTinyChunks() throws(GzipError) {
+        let payload = Self.bytesFromString("hello")
+        let gzipped = Gzip.encode(payload)
+        var decoder = Gzip.Streaming.Decoder()
+        for byte in gzipped.storage {
+            decoder.update(Self.bytesFromArray([byte]))
+        }
+        let plain = try decoder.finish()
+        #expect(Array(plain.storage) == Array(payload.storage))
+    }
+
+    @Test("Decoder: gzip with FNAME flag round-trips")
+    func decoderWithFNAME() throws(GzipError) {
+        let payload = Self.bytesFromString("data with filename")
+        let gzipped = Gzip.encode(payload, filename: "test.txt")
+        var decoder = Gzip.Streaming.Decoder()
+        decoder.update(gzipped)
+        let plain = try decoder.finish()
+        #expect(Array(plain.storage) == Array(payload.storage))
+    }
+
+    @Test("Decoder: 70 KiB payload round-trip")
+    func decoderLargePayload() throws(GzipError) {
+        let payload = Self.bytesFromArray([UInt8](repeating: 0x42, count: 70 * 1024))
+        let gzipped = Gzip.encode(payload)
+        var decoder = Gzip.Streaming.Decoder()
+        decoder.update(gzipped)
+        let plain = try decoder.finish()
+        #expect(plain.storage.count == 70 * 1024)
+        #expect(Array(plain.storage) == Array(payload.storage))
+    }
+
+    @Test("Decoder: truncated input throws")
+    func decoderTruncatedThrows() {
+        let payload = Self.bytesFromString("hello")
+        let gzipped = Gzip.encode(payload)
+        let truncated = ContiguousArray(gzipped.storage.dropLast(5))
+        var decoder = Gzip.Streaming.Decoder()
+        decoder.update(Bytes(Array(truncated)))
+        do {
+            _ = try decoder.finish()
+            Issue.record("expected throw")
+        } catch GzipError.truncated, GzipError.crc32Mismatch, GzipError.isizeMismatch, GzipError.malformedDeflate {
+            // any of these is acceptable for truncated input
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
+    @Test("Decoder: bad magic throws badMagic")
+    func decoderBadMagicThrows() {
+        var bad = Self.bytesFromArray([0x00, 0x00, 0x08, 0x00, 0, 0, 0, 0, 0, 0xFF])
+        // append placeholder body + trailer
+        for _ in 0..<10 { bad.append(0) }
+        var decoder = Gzip.Streaming.Decoder()
+        decoder.update(bad)
+        do {
+            _ = try decoder.finish()
+            Issue.record("expected throw")
+        } catch GzipError.badMagic {
+            // expected
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
+    @Test("Decoder: double-finish throws decoderFinished")
+    func decoderDoubleFinishThrows() throws(GzipError) {
+        let gzipped = Gzip.encode(Self.bytesFromString("data"))
+        var decoder = Gzip.Streaming.Decoder()
+        decoder.update(gzipped)
+        _ = try decoder.finish()
+        do {
+            _ = try decoder.finish()
+            Issue.record("expected throw")
+        } catch GzipError.decoderFinished {
+            // expected
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
+    @Test("Decoder: update after finish is silent no-op (then double-finish throws)")
+    func decoderUpdateAfterFinishNoOp() throws(GzipError) {
+        let payload = Self.bytesFromString("first")
+        let gzipped = Gzip.encode(payload)
+        var decoder = Gzip.Streaming.Decoder()
+        decoder.update(gzipped)
+        let plain1 = try decoder.finish()
+        decoder.update(Gzip.encode(Self.bytesFromString("second")))
+        do {
+            _ = try decoder.finish()
+            Issue.record("expected throw")
+        } catch GzipError.decoderFinished {
+            // expected
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+        #expect(Array(plain1.storage) == Array(payload.storage))
+    }
+
+    @Test("Decoder: empty update is no-op (whole flow still works)")
+    func decoderEmptyUpdateNoOp() throws(GzipError) {
+        let payload = Self.bytesFromString("hello")
+        let gzipped = Gzip.encode(payload)
+        var decoder = Gzip.Streaming.Decoder()
+        decoder.update(Bytes())  // no-op
+        decoder.update(gzipped)
+        decoder.update(Bytes())  // no-op
+        let plain = try decoder.finish()
+        #expect(Array(plain.storage) == Array(payload.storage))
+    }
+
+    @Test("Decoder: single-byte payload round-trip")
+    func decoderSingleBytePayload() throws(GzipError) {
+        let payload = Self.bytesFromArray([0x7F])
+        let gzipped = Gzip.encode(payload)
+        var decoder = Gzip.Streaming.Decoder()
+        decoder.update(gzipped)
+        let plain = try decoder.finish()
+        #expect(Array(plain.storage) == [0x7F])
+    }
+
+    // MARK: - Streaming Encoder (existing v0.3-v0.4 edge cases)
+
     @Test("update after finish is silent no-op (then double-finish throws)")
     func updateAfterFinishNoOp() throws {
         var encoder = Gzip.Streaming.Encoder()
