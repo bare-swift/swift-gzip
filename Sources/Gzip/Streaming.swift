@@ -216,7 +216,7 @@ extension Gzip.Streaming {
     /// ``Gzip/decode(_:)`` one-shot at `finish()`. The decoded output is
     /// not yielded incrementally during `update(_:)`. True memory-
     /// streaming gzip decode requires a state-machine refactor of the
-    /// underlying ``Deflate/Streaming/Decoder`` (v0.5 buffering wrap) →
+    /// underlying `Deflate.Streaming.Decoder` (v0.5 buffering wrap) →
     /// `Deflate.Streaming.Decoder` v0.6+ would enable it; gzip v0.6 would
     /// inherit. v0.5 ships the streaming-symmetric API surface today.
     ///
