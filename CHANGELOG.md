@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-05-18
+
+### Inherited
+- **True memory-streaming inflate via swift-deflate v0.6.** `Gzip.Streaming.Decoder` wraps `Deflate.Streaming.Decoder` (per Phase 31 inheritance pattern); bumping the swift-deflate dep floor from 0.5 → 0.6 inherits the state-machine inflate refactor automatically. Adopters get true memory-streaming through the gzip wrap with **zero code changes**.
+
+### Internal
+- swift-deflate dep floor: 0.5.0 → 0.6.0.
+- Public API surface byte-for-byte unchanged. All 63 v0.5 tests pass without modification.
+
+### Migration (v0.5 → v0.6)
+- **Additive only — non-breaking.** All v0.1-v0.5 APIs unchanged.
+- The `Gzip.Streaming.Decoder` shape (init/update/finish) is preserved byte-for-byte. Adopters who were holding compressed input in memory awaiting `finish()` will now see the inner deflate path consume input and accumulate decoded bytes incrementally. Behavior at `finish()` is byte-for-byte equivalent.
+
+### Phase 35
+- Tranche 35A of [RFC-0040](https://github.com/bare-swift/bare-swift/blob/main/rfcs/0040-phase-35-anchor-downstream-propagation-sweep.md). Downstream propagation sweep — bumps swift-deflate dep to inherit Phase 34's true memory-streaming inflate. Closes the deflate-family true-memory-streaming arc started by Phase 30.
+
 ## [0.5.0] — 2026-05-17
 
 ### Added
